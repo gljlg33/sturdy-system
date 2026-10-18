@@ -1,0 +1,9 @@
+[project]
+name = "desk"
+version = "0.1.0"
+description = "24/7 AI trading desk skeleton. Paper trading only."
+requires-python = ">=3.11"
+dependencies = []  # stdlib only. The TypeSafe SDK is added to the judge once confirmed.
+
+[tool.setuptools.packages.find]
+include = ["desk*"]
