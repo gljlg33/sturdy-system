@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 _SECRET_KEY = re.compile(r"(secret|token|api[_-]?key|authorization|password|private)", re.I)
-_SECRET_ENV = ("DESK_SECRET", "JEV_API_KEY")
+_SECRET_ENV = ("DESK_SECRET", "TYPESAFE_API_KEY")
 
 
 def _scrub(obj: Any, secrets: tuple[str, ...]) -> Any:

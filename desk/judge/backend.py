@@ -1,7 +1,7 @@
 """Backends the judge service can call. Only the judge process imports this module.
 
-TODO(jev-sdk): TypeSafeJevBackend is a stub. Wire it to the official TypeSafe SDK once
-its package name and API are confirmed; do not guess at the call shape.
+TypeSafeJevBackend uses the official TypeSafe Python SDK (`typesafe-sdk`, pinned in
+pyproject.toml). The SDK is imported lazily so the desk itself stays stdlib-only.
 """
 from __future__ import annotations
 
@@ -38,20 +38,54 @@ class JevBackend(Protocol):
 
 
 class TypeSafeJevBackend:
-    def __init__(self, api_key: str, model: str):
-        self._api_key = api_key  # held only in the judge process memory
+    def __init__(self, api_key: str, model: str, timeout_s: float = 10.0, http_client=None):
+        from typesafe_sdk import RetryPolicy, TypeSafeClient
+
         self.model = model
+        # The SDK must not retry on its own: the desk client knows the block deadline and does the
+        # backing off. max_retries=0 also guarantees a malformed question is sent exactly once.
+        # The key lives only inside the SDK client (its config keeps it out of repr).
+        self._client = TypeSafeClient(api_key=api_key, model=model, retry=RetryPolicy(max_retries=0),
+                                      timeout=timeout_s, http_client=http_client)
 
     def __repr__(self) -> str:  # never let the key show up in a traceback or log line
         return f"TypeSafeJevBackend(model={self.model!r})"
 
+    def available_models(self) -> list[str]:
+        return [m.name for m in self._client.models.list().models]
+
     def ask_battery(self, *, context: str, questions: list[dict]) -> BackendResult:
-        # Expected shape once wired:
-        #   resp = <sdk>.ask(model=self.model, context=context, questions=questions)   # one call
-        #   map the SDK's rate-limit error   -> raise RateLimited(retry_after)
-        #   map the SDK's invalid-question error -> raise MalformedQuestion(detail)
-        #   return BackendResult(model_version=<exact version from resp>, answers=..., raw=resp)
-        raise NotImplementedError("TypeSafe SDK not wired yet; see TODO(jev-sdk) in desk/judge/backend.py")
+        from typesafe_sdk import (Choice, TypeSafeBadRequestError, TypeSafeError, TypeSafeRateLimitError,
+                                  TypeSafeUnprocessableEntityError)
+
+        qs = {q["id"]: Choice(instructions=q["text"], criteria=q.get("criteria") or {o: None for o in q["options"]})
+              for q in questions}
+        try:
+            resp = self._client.system_one(state=context, questions=qs, model=self.model)  # one call, whole battery
+        except TypeSafeRateLimitError as e:
+            raise RateLimited(_retry_after_s(e.headers)) from None
+        except (TypeSafeBadRequestError, TypeSafeUnprocessableEntityError) as e:
+            raise MalformedQuestion(str(e)) from None
+        except TypeSafeError as e:
+            raise BackendError(type(e).__name__) from None
+        return BackendResult(
+            model_version=resp.model,  # the model that actually answered, as the API reports it
+            answers={qid: dict(a.probabilities) for qid, a in resp.choices.items()},
+        )
+
+
+def _retry_after_s(headers) -> float | None:
+    raw = headers.get("retry-after-ms")
+    if raw is not None:
+        try:
+            return max(0.0, float(raw) / 1000)
+        except ValueError:
+            pass
+    raw = headers.get("retry-after")
+    try:
+        return max(0.0, float(raw)) if raw is not None else None
+    except ValueError:
+        return None
 
 
 class FakeJevBackend:

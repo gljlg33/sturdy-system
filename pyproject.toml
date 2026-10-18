@@ -3,7 +3,10 @@ name = "desk"
 version = "0.1.0"
 description = "24/7 AI trading desk skeleton. Paper trading only."
 requires-python = ">=3.11"
-dependencies = []  # stdlib only. The TypeSafe SDK is added to the judge once confirmed.
+dependencies = []  # the desk is stdlib only
+
+[project.optional-dependencies]
+judge = ["typesafe-sdk==0.7.5"]  # only the judge host installs this
 
 [tool.setuptools.packages.find]
 include = ["desk*"]

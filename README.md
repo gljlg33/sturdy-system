@@ -18,11 +18,11 @@
 
 ## Jev and the judge
 
-- Only the judge process reads `JEV_API_KEY`. Bots call `POST /v1/judge` with `X-Desk-Secret`.
-- One call per bot per decision carries the bot's full battery. The judge returns answers raw plus the exact `model_version` string; it makes no trading decision.
-- `JEV_MODEL` must be an exact version. `jev-latest` and any `*-latest` are refused at startup. Every answer is logged with its version, and risk vetoes any opening order whose version isn't the pinned one.
-- Deadline = start of the next block. No answer by then -> hold. 429/503 back off (honouring `Retry-After`) inside the deadline. A malformed-question error (422) is never retried.
-- **TODO(jev-sdk):** `TypeSafeJevBackend` in `desk/judge/backend.py` is a stub until the official TypeSafe SDK is confirmed.
+- Jev is called through the official TypeSafe Python SDK, [`typesafe-sdk`](https://pypi.org/project/typesafe-sdk/) (pinned to 0.7.5), following TypeSafe's official agent skill ([typesafe-ai/skills](https://github.com/typesafe-ai/skills)). Each bot question is a `Choice` whose options are described in `criteria`, since Jev never sees question ids.
+- Only the judge process reads `TYPESAFE_API_KEY`, and removes it from its environment once read. Bots call `POST /v1/judge` with `X-Desk-Secret`.
+- One `system_one` call per bot per decision carries the bot's full battery. The judge returns the probabilities raw plus the model name the API reports as having answered (`response.model`); it makes no trading decision.
+- `JEV_MODEL` must be an exact version. `jev-latest` and any `*-latest` are refused, and the judge refuses to start if the pin isn't in the account's model list (`GET /v1/models`). Every answer is logged with its version, and risk vetoes any opening order whose version isn't exactly the pinned one. If the API reports a dated name (e.g. `jev-1.14-YYYYMMDD`) for an undated pin, set `JEV_MODEL` to the dated name: until then every opening order is vetoed, which shows up in the daily summary.
+- Deadline = start of the next block. No answer by then -> hold. The SDK's own retries are turned off; the desk client backs off on 429/503 (honouring `Retry-After`) inside the deadline. A malformed-question error (400/422) is never retried.
 
 ## Modes
 
@@ -32,7 +32,8 @@
 ## Run
 
 ```sh
-python -m unittest discover -s tests -t .           # tests, stdlib only
+python -m unittest discover -s tests -t .           # tests (SDK tests skip unless the judge extra is installed)
+pip install -e '.[judge]'                           # judge host only: installs typesafe-sdk
 python -m desk.run --demo 600 --mode shadow         # offline: synthetic feed + in-process fake judge
 python -m desk.reports.daily --log-dir var/demo-logs --day YYYY-MM-DD
 python -m desk.reports.calibration --log-dir var/demo-logs --out var/reports
@@ -42,4 +43,4 @@ The real loop (`python -m desk.run`) stops with an error until a market-data fee
 
 ## Secrets
 
-None in code or logs. Configure via environment (see `.env.example`; `.env` is git-ignored). The event log redacts secret-looking keys and masks `DESK_SECRET` / `JEV_API_KEY` values wherever they appear.
+None in code or logs. Configure via environment (see `.env.example`; `.env` is git-ignored). The event log redacts secret-looking keys and masks `DESK_SECRET` / `TYPESAFE_API_KEY` values wherever they appear.

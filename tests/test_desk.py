@@ -222,13 +222,13 @@ class TestJudge(unittest.TestCase):
 class TestLogsAndReports(unittest.TestCase):
     def test_secrets_scrubbed(self):
         with tempfile.TemporaryDirectory() as d:
-            os.environ["JEV_API_KEY"] = "sk-very-secret-value"
+            os.environ["TYPESAFE_API_KEY"] = "sk-very-secret-value"
             try:
                 log = EventLog(d)
                 log.write("x", 0, api_key="abc", note="key is sk-very-secret-value", nested={"Authorization": "b"})
                 text = "".join(p.read_text() for p in Path(d).glob("*.jsonl"))
             finally:
-                del os.environ["JEV_API_KEY"]
+                del os.environ["TYPESAFE_API_KEY"]
             self.assertNotIn("sk-very-secret-value", text)
             self.assertNotIn('"abc"', text)
 

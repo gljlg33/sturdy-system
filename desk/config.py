@@ -1,7 +1,8 @@
 """Desk configuration.
 
 Secrets never live here. The desk process only ever reads DESK_SECRET (to talk
-to the judge). The Jev key is read by the judge service alone (desk/judge/service.py).
+to the judge). The Jev key (TYPESAFE_API_KEY) is read by the judge service alone
+(desk/judge/service.py).
 """
 from __future__ import annotations
 

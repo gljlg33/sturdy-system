@@ -4,7 +4,7 @@ Bots authenticate with the desk secret (X-Desk-Secret). The judge forwards one b
 full battery to Jev in one call and returns the answers raw, with the exact model
 version string. It makes no trading decision and knows nothing about positions.
 
-Run:  JEV_API_KEY=... DESK_SECRET=... JEV_MODEL=<exact-version> python -m desk.judge.service
+Run:  TYPESAFE_API_KEY=... DESK_SECRET=... JEV_MODEL=<exact-version> python -m desk.judge.service
 """
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def make_handler(backend: JevBackend, desk_secret: str, pinned_model: str):
                 return self._send(429, {"error": "rate_limited"}, hdr)
             except MalformedQuestion as e:
                 return self._send(422, {"error": "malformed_question", "detail": str(e)})
-            except (BackendError, NotImplementedError) as e:
+            except BackendError as e:
                 return self._send(502, {"error": "backend_error", "detail": type(e).__name__})
 
             # Raw passthrough. The pinned model is reported alongside so the desk can compare,
@@ -100,11 +100,14 @@ def main():
     from desk.judge.backend import TypeSafeJevBackend
 
     model = require_pinned_model(os.environ.get("JEV_MODEL", ""))
-    key = os.environ.get("JEV_API_KEY")
+    key = os.environ.pop("TYPESAFE_API_KEY", "")  # removed from the environment once read
     if not key:
-        raise SystemExit("JEV_API_KEY not set")
+        raise SystemExit("TYPESAFE_API_KEY not set")
     backend = TypeSafeJevBackend(api_key=key, model=model)
     del key
+    available = backend.available_models()
+    if model not in available:
+        raise SystemExit(f"refusing to start: JEV_MODEL {model!r} is not offered to this account: {available}")
     httpd = serve(backend, desk_secret(), model,
                   os.environ.get("JUDGE_HOST", "127.0.0.1"), int(os.environ.get("JUDGE_PORT", "8787")))
     print(f"judge listening on {httpd.server_address}, model={model}")
